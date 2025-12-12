@@ -1,97 +1,121 @@
-// src/pages/ResearchMode.tsx
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Search, Plus, FileText, Link, BookOpen } from 'lucide-react';
+// File: /mnt/c/Users/Shrinjita Paul/Documents/GitHub/research-hub/src/pages/ResearchMode.tsx
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Search, BookOpen } from "lucide-react";
 
-interface ResearchCard {
+interface Tab {
   id: string;
-  title: string;
   url: string;
-  summary?: string;
+  title: string;
+  summary: string;
   citations: string[];
-  notes: string;
-  addedToSurvey: boolean;
-  keywords: string[];
+  previewText: string;
 }
 
 export default function ResearchMode() {
-  const [researchTopic, setResearchTopic] = useState('');
-  const [cards, setCards] = useState<ResearchCard[]>([]);
+  const [topic, setTopic] = useState("");
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [literatureSurvey, setLiteratureSurvey] = useState("");
   const [loading, setLoading] = useState(false);
-  const [literatureSurvey, setLiteratureSurvey] = useState('');
 
-  // Fetch top links based on topic
-  const fetchResearchSources = async () => {
-    if (!researchTopic.trim()) return;
-    
+  const addNewTab = async (url: string) => {
+    if (!url.trim()) return;
+
     setLoading(true);
     try {
-      // TODO: Call MCP crawl endpoint
-      // const response = await fetch('/api/mcp/crawl', {
-      //   method: 'POST',
-      //   body: JSON.stringify({ topic: researchTopic })
-      // });
-      // const data = await response.json();
-      
-      // Mock data for now
-      const mockData: ResearchCard[] = [
-        {
-          id: '1',
-          title: 'Research Paper on Topic',
-          url: 'https://example.com/paper1',
-          summary: '',
-          citations: [],
-          notes: '',
-          addedToSurvey: false,
-          keywords: ['keyword1', 'keyword2']
-        },
-        // Add more mock cards
-      ];
-      
-      setCards(mockData);
-    } catch (error) {
-      console.error('Error fetching sources:', error);
+      let title = url;
+      let previewText = "Preview not available";
+
+      try {
+        const res = await fetch(url);
+        const html = await res.text();
+        const matchTitle = html.match(/<title>(.*?)<\/title>/);
+        title = matchTitle ? matchTitle[1] : url;
+        previewText = html.replace(/<[^>]*>?/gm, "").slice(0, 200) || previewText;
+      } catch {
+        // fallback preview
+      }
+
+      const newTab: Tab = {
+        id: `${Date.now()}`,
+        url,
+        title,
+        previewText,
+        summary: "Summary not generated yet",
+        citations: [],
+      };
+
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTab(newTab.id);
     } finally {
       setLoading(false);
     }
   };
 
-  const generateSummary = async (cardId: string) => {
-    // TODO: Call MCP summarize endpoint
-    console.log('Generating summary for:', cardId);
-  };
+  const summarizeTab = async (tabId: string) => {
+    const tab = tabs.find((t) => t.id === tabId);
+    if (!tab) return;
 
-  const extractCitations = async (cardId: string) => {
-    // TODO: Call MCP extract_citations endpoint
-    console.log('Extracting citations for:', cardId);
-  };
-
-  const generateLiteratureSurvey = async () => {
-    const selectedCards = cards.filter(card => card.addedToSurvey);
-    if (selectedCards.length === 0) return;
-    
     setLoading(true);
     try {
-      // TODO: Call MCP combine_sources endpoint
-      // const response = await fetch('/api/mcp/combine_sources', {
-      //   method: 'POST',
-      //   body: JSON.stringify({ sources: selectedCards })
-      // });
-      // const survey = await response.json();
-      
-      // Mock survey
-      setLiteratureSurvey(`Literature Survey for ${researchTopic}\n\nKey findings from ${selectedCards.length} sources...`);
-    } catch (error) {
-      console.error('Error generating survey:', error);
+      let summary = "Fallback summary: key points of this page...";
+
+      try {
+        const response = await fetch("http://localhost:3001/api/gemini/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: tab.previewText }),
+        });
+        const data = await response.json();
+        summary = data.summary || summary;
+      } catch {
+        console.warn("Gemini summarize failed, using fallback");
+      }
+
+      updateTab(tabId, { summary });
     } finally {
       setLoading(false);
     }
+  };
+
+  const extractCitations = async (tabId: string) => {
+    const tab = tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+
+    setLoading(true);
+    try {
+      let citations: string[] = ["Doe, 2025. Sample citation"]; // fallback
+
+      try {
+        const response = await fetch("http://localhost:3001/api/gemini/extract_citations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: tab.previewText }),
+        });
+        const data = await response.json();
+        citations = Array.isArray(data) ? data : citations;
+      } catch {
+        console.warn("Gemini citations failed, using fallback");
+      }
+
+      updateTab(tabId, { citations });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateTab = (tabId: string, updates: Partial<Tab>) => {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, ...updates } : t)));
+  };
+
+  const generateLiteratureSurvey = () => {
+    const combined = tabs.map((t) => t.summary || t.previewText).join("\n\n");
+    setLiteratureSurvey(`Literature Survey for topic "${topic}":\n\n${combined}`);
   };
 
   return (
@@ -101,173 +125,84 @@ export default function ResearchMode() {
           <h1 className="text-3xl font-bold">Research Mode</h1>
           <p className="text-muted-foreground">Centralized research workspace</p>
         </div>
-        <Button onClick={generateLiteratureSurvey} disabled={cards.length === 0}>
+        <Button onClick={generateLiteratureSurvey} disabled={tabs.length === 0}>
           <BookOpen className="mr-2 h-4 w-4" />
           Generate Literature Survey
         </Button>
       </div>
 
-      {/* Topic Search */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Start Your Research</CardTitle>
+          <CardTitle>Add a New Research Tab</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
             <Input
-              placeholder="Enter research topic..."
-              value={researchTopic}
-              onChange={(e) => setResearchTopic(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && fetchResearchSources()}
+              placeholder="Enter URL..."
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addNewTab(topic)}
             />
-            <Button onClick={fetchResearchSources} disabled={loading}>
+            <Button onClick={() => addNewTab(topic)} disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              Search
+              Add Tab
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="workspace" className="space-y-4">
+      <Tabs value={activeTab || undefined} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="workspace">
-            <FileText className="mr-2 h-4 w-4" />
-            Research Workspace
-          </TabsTrigger>
-          <TabsTrigger value="survey">
-            <BookOpen className="mr-2 h-4 w-4" />
-            Literature Survey
-          </TabsTrigger>
+          {tabs.map((tab) => (
+            <TabsTrigger key={tab.id} value={tab.id}>
+              {tab.title.slice(0, 15)}...
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="workspace">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {cards.map((card) => (
-              <ResearchCardComponent
-                key={card.id}
-                card={card}
-                onUpdate={(updated) => {
-                  setCards(cards.map(c => c.id === updated.id ? updated : c));
-                }}
-                onGenerateSummary={() => generateSummary(card.id)}
-                onExtractCitations={() => extractCitations(card.id)}
-              />
-            ))}
-            {cards.length === 0 && (
-              <Card className="col-span-full p-8 text-center">
-                <p className="text-muted-foreground">No research sources yet. Start by entering a topic above.</p>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="survey">
-          <Card>
-            <CardHeader>
-              <CardTitle>Literature Survey</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={literatureSurvey}
-                onChange={(e) => setLiteratureSurvey(e.target.value)}
-                className="min-h-[400px] font-mono"
-                placeholder="Generated literature survey will appear here..."
-              />
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline">Save</Button>
-                <Button>Export as Markdown</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {tabs.map((tab) => (
+          <TabsContent key={tab.id} value={tab.id}>
+            <iframe src={tab.url} className="w-full h-[500px] border" />
+            <div className="mt-4 space-x-2">
+              <Button onClick={() => summarizeTab(tab.id)}>Generate Summary</Button>
+              <Button onClick={() => extractCitations(tab.id)}>Extract Citations</Button>
+            </div>
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle>Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  value={tab.summary}
+                  onChange={(e) => updateTab(tab.id, { summary: e.target.value })}
+                  className="min-h-[80px] font-mono"
+                />
+                <div className="mt-2">
+                  <strong>Citations:</strong>
+                  <ul className="list-disc ml-4">
+                    {tab.citations?.map((c, i) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ))}
       </Tabs>
-    </div>
-  );
-}
 
-function ResearchCardComponent({ 
-  card, 
-  onUpdate,
-  onGenerateSummary,
-  onExtractCitations 
-}: { 
-  card: ResearchCard;
-  onUpdate: (card: ResearchCard) => void;
-  onGenerateSummary: () => void;
-  onExtractCitations: () => void;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex justify-between items-start">
-          <CardTitle className="text-lg">{card.title}</CardTitle>
-          <Badge variant={card.addedToSurvey ? "default" : "outline"}>
-            {card.addedToSurvey ? 'In Survey' : 'Not Added'}
-          </Badge>
-        </div>
-        <div className="flex items-center text-sm text-muted-foreground">
-          <Link className="h-3 w-3 mr-1" />
-          <a href={card.url} target="_blank" rel="noopener noreferrer" className="truncate hover:underline">
-            {card.url}
-          </a>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <h4 className="font-semibold mb-2">Summary</h4>
-          {card.summary ? (
-            <p className="text-sm">{card.summary}</p>
-          ) : (
-            <Button size="sm" onClick={onGenerateSummary}>
-              Generate Summary
-            </Button>
-          )}
-        </div>
-
-        <div>
-          <div className="flex justify-between items-center mb-2">
-            <h4 className="font-semibold">Citations</h4>
-            <Button size="sm" variant="outline" onClick={onExtractCitations}>
-              Extract
-            </Button>
-          </div>
-          <ScrollArea className="h-24 border rounded p-2">
-            {card.citations.map((citation, index) => (
-              <p key={index} className="text-xs mb-1">{citation}</p>
-            ))}
-          </ScrollArea>
-        </div>
-
-        <div>
-          <h4 className="font-semibold mb-2">Notes</h4>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Combined Literature Survey</CardTitle>
+        </CardHeader>
+        <CardContent>
           <Textarea
-            placeholder="Add notes..."
-            value={card.notes}
-            onChange={(e) => onUpdate({ ...card, notes: e.target.value })}
-            className="min-h-[80px] text-sm"
+            value={literatureSurvey}
+            onChange={(e) => setLiteratureSurvey(e.target.value)}
+            className="min-h-[200px] font-mono"
           />
-        </div>
-
-        <div className="flex justify-between">
-          <Button
-            size="sm"
-            variant={card.addedToSurvey ? "default" : "outline"}
-            onClick={() => onUpdate({ ...card, addedToSurvey: !card.addedToSurvey })}
-          >
-            {card.addedToSurvey ? 'Remove from Survey' : 'Add to Survey'}
-          </Button>
-        </div>
-
-        {card.keywords.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {card.keywords.map((keyword, index) => (
-              <Badge key={index} variant="secondary" className="text-xs">
-                {keyword}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
