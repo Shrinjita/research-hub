@@ -17,45 +17,54 @@ interface Tab {
 }
 
 export default function ResearchMode() {
-  const [topic, setTopic] = useState("");
+  const [urlInput, setUrlInput] = useState("");
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [literatureSurvey, setLiteratureSurvey] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const addNewTab = async (url: string) => {
-    if (!url.trim()) return;
+  const addNewTab = async (query: string) => {
+  if (!query.trim()) return;
 
-    setLoading(true);
-    try {
-      let title = url;
-      let previewText = "Preview not available";
+  setLoading(true);
+  try {
+    // Call SERP API for Google Scholar results
+    const response = await fetch("http://localhost:3001/api/serpapi/search_scholar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ q: query }),
+    });
+    const data = await response.json();
 
-      try {
-        const res = await fetch(url);
-        const html = await res.text();
-        const matchTitle = html.match(/<title>(.*?)<\/title>/);
-        title = matchTitle ? matchTitle[1] : url;
-        previewText = html.replace(/<[^>]*>?/gm, "").slice(0, 200) || previewText;
-      } catch {
-        // fallback preview
-      }
-
-      const newTab: Tab = {
-        id: `${Date.now()}`,
-        url,
-        title,
-        previewText,
-        summary: "Summary not generated yet",
-        citations: [],
-      };
-
-      setTabs((prev) => [...prev, newTab]);
-      setActiveTab(newTab.id);
-    } finally {
-      setLoading(false);
+    // Extract first result (can expand later)
+    const firstResult = data?.results?.[0];
+    if (!firstResult) {
+      alert("No results found");
+      return;
     }
-  };
+
+    const newTab: Tab = {
+      id: `${Date.now()}`,
+      url: firstResult.link || query,
+      title: firstResult.title || query,
+      previewText: firstResult.snippet || "Preview not available",
+      summary: "Summary not generated yet",
+      citations: [],
+    };
+
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTab(newTab.id);
+
+    // Clear input
+    setTopic("");
+  } catch (err) {
+    console.error(err);
+    alert("Error fetching search results");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const summarizeTab = async (tabId: string) => {
     const tab = tabs.find((t) => t.id === tabId);
@@ -138,7 +147,7 @@ export default function ResearchMode() {
         <CardContent>
           <div className="flex gap-2">
             <Input
-              placeholder="Enter URL..."
+              placeholder="Search topic..."
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addNewTab(topic)}
