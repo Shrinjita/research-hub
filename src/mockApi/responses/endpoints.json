@@ -1,0 +1,122 @@
+{
+  "login": {
+    "POST /api/login": {
+      "request": {
+        "email": "demo@taskoscope.io",
+        "password": "demo123"
+      },
+      "response": {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjEiLCJuYW1lIjoiRGVtbyBVc2VyIiwiZW1haWwiOiJkZW1vQHRhc2tvc2NvcGUuaW8ifQ.mock",
+        "user": {
+          "id": "1",
+          "name": "Demo User",
+          "email": "demo@taskoscope.io"
+        }
+      }
+    }
+  },
+  "register": {
+    "POST /api/register": {
+      "request": {
+        "name": "New User",
+        "email": "new@example.com",
+        "password": "password123"
+      },
+      "response": {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "user": {
+          "id": "2",
+          "name": "New User",
+          "email": "new@example.com"
+        }
+      }
+    }
+  },
+  "me": {
+    "GET /api/me": {
+      "headers": {
+        "Authorization": "Bearer <token>"
+      },
+      "response": {
+        "id": "1",
+        "name": "Demo User",
+        "email": "demo@taskoscope.io"
+      }
+    }
+  },
+  "ingest": {
+    "POST /api/ingest": {
+      "request": {
+        "sessionId": "session-123",
+        "sources": [
+          { "url": "https://en.wikipedia.org/wiki/Quantum_computing", "type": "web" },
+          { "url": "/mockApi/assets/quantum_basics.pdf", "type": "pdf" }
+        ]
+      },
+      "response": {
+        "status": "ok",
+        "sources": [
+          {
+            "sourceId": "src-1234567890-0",
+            "title": "Quantum computing - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+            "type": "web",
+            "favicon": "https://www.wikipedia.org/favicon.ico",
+            "preview": "Quantum computing is a type of computation whose operations can harness quantum mechanical phenomena..."
+          },
+          {
+            "sourceId": "src-1234567890-1",
+            "title": "Quantum Computing Basics.pdf",
+            "url": "/mockApi/assets/quantum_basics.pdf",
+            "type": "pdf",
+            "preview": "Introduction to quantum computing fundamentals, qubits, and quantum gates."
+          }
+        ]
+      }
+    }
+  },
+  "extract": {
+    "POST /api/extract": {
+      "request": {
+        "url": "https://en.wikipedia.org/wiki/Quantum_computing"
+      },
+      "response": {
+        "title": "Quantum computing",
+        "authors": ["Wikipedia contributors"],
+        "year": "2024",
+        "doi": null,
+        "text": "Quantum computing is a type of computation whose operations can harness quantum mechanical phenomena, such as superposition, interference, and entanglement.",
+        "citationAPA": "Wikipedia contributors. (2024). Quantum computing. In Wikipedia, The Free Encyclopedia. Retrieved from https://en.wikipedia.org/wiki/Quantum_computing",
+        "bibtex": "@misc{wiki:quantum_computing,\n  author = \"{Wikipedia contributors}\",\n  title = \"Quantum computing --- {Wikipedia}{,} The Free Encyclopedia\",\n  year = \"2024\",\n  url = \"https://en.wikipedia.org/wiki/Quantum_computing\",\n  note = \"[Online; accessed 2024-01-15]\"\n}"
+      }
+    }
+  },
+  "summarize": {
+    "POST /api/summarize": {
+      "request": {
+        "sessionId": "session-123",
+        "sourceIds": ["src-1", "src-2"]
+      },
+      "response": {
+        "summaryHtml": "<h2>Literature Survey: Quantum Computing</h2><h3>Abstract</h3><p>This survey examines the foundational principles and recent advances in quantum computing...</p>",
+        "references": [
+          { "sourceId": "src-1", "excerpt": "Quantum computing is a type of computation..." },
+          { "sourceId": "src-2", "excerpt": "This paper provides a comprehensive introduction..." }
+        ]
+      }
+    }
+  },
+  "export": {
+    "POST /api/export": {
+      "request": {
+        "sessionId": "session-123",
+        "format": "bibtex"
+      },
+      "response": {
+        "type": "blob",
+        "contentType": "application/x-bibtex",
+        "filename": "citations.bib"
+      }
+    }
+  }
+}
