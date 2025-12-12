@@ -1,757 +1,273 @@
-import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { mockApi, Source, Citation, ExtractResponse } from '@/services/mockApi';
+// src/pages/ResearchMode.tsx
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { toast } from 'sonner';
-import {
-  BookOpen,
-  ChevronLeft,
-  Plus,
-  Search,
-  FileText,
-  Sparkles,
-  Save,
-  Download,
-  X,
-  ExternalLink,
-  Quote,
-  Pin,
-  Trash2,
-  Highlighter,
-  MessageSquare,
-  Send,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Loader2,
-  CheckCircle2,
-  Globe,
-  FileIcon,
-} from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Loader2, Search, Plus, FileText, Link, BookOpen } from 'lucide-react';
 
-interface Project {
+interface ResearchCard {
   id: string;
-  name: string;
-  sources: Source[];
-  citations: Citation[];
-  createdAt: Date;
-}
-
-interface Note {
-  id: string;
-  sourceId: string;
-  text: string;
-  highlight?: string;
-  createdAt: Date;
+  title: string;
+  url: string;
+  summary?: string;
+  citations: string[];
+  notes: string;
+  addedToSurvey: boolean;
+  keywords: string[];
 }
 
 export default function ResearchMode() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  
-  // State
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [project, setProject] = useState<Project | null>(null);
-  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
-  const [citations, setCitations] = useState<Citation[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [isGeneratingSurvey, setIsGeneratingSurvey] = useState(false);
-  const [surveyContent, setSurveyContent] = useState<string | null>(null);
-  const [citationOverlay, setCitationOverlay] = useState<{ visible: boolean; status: 'loading' | 'success' | null; sourceId: string | null }>({
-    visible: false,
-    status: null,
-    sourceId: null,
-  });
-  const [highlighterActive, setHighlighterActive] = useState(false);
-  const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('Quantum Computing Basics');
+  const [researchTopic, setResearchTopic] = useState('');
+  const [cards, setCards] = useState<ResearchCard[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [literatureSurvey, setLiteratureSurvey] = useState('');
 
-  const activeSource = project?.sources.find(s => s.sourceId === activeSourceId);
-
-  // Create new project with demo sources
-  const handleCreateProject = useCallback(async () => {
-    const sessionId = `session-${Date.now()}`;
+  // Fetch top links based on topic
+  const fetchResearchSources = async () => {
+    if (!researchTopic.trim()) return;
     
-    // Demo sources
-    const demoSources = [
-      { url: 'https://en.wikipedia.org/wiki/Quantum_computing', type: 'web' as const },
-      { url: '/mockApi/assets/quantum_basics.pdf', type: 'pdf' as const },
-    ];
-
+    setLoading(true);
     try {
-      const result = await mockApi.ingest(sessionId, demoSources);
+      // TODO: Call MCP crawl endpoint
+      // const response = await fetch('/api/mcp/crawl', {
+      //   method: 'POST',
+      //   body: JSON.stringify({ topic: researchTopic })
+      // });
+      // const data = await response.json();
       
-      const newProject: Project = {
-        id: sessionId,
-        name: newProjectName,
-        sources: result.sources,
-        citations: [],
-        createdAt: new Date(),
-      };
+      // Mock data for now
+      const mockData: ResearchCard[] = [
+        {
+          id: '1',
+          title: 'Research Paper on Topic',
+          url: 'https://example.com/paper1',
+          summary: '',
+          citations: [],
+          notes: '',
+          addedToSurvey: false,
+          keywords: ['keyword1', 'keyword2']
+        },
+        // Add more mock cards
+      ];
       
-      setProject(newProject);
-      setActiveSourceId(result.sources[0]?.sourceId || null);
-      setNewProjectDialogOpen(false);
-      toast.success('Project created with demo sources');
+      setCards(mockData);
     } catch (error) {
-      toast.error('Failed to create project');
-    }
-  }, [newProjectName]);
-
-  // Citation capture
-  const handleCaptureCitation = useCallback(async (source: Source) => {
-    setCitationOverlay({ visible: true, status: 'loading', sourceId: source.sourceId });
-    
-    try {
-      const result: ExtractResponse = await mockApi.extract(source.url);
-      
-      const newCitation: Citation = {
-        id: `cite-${Date.now()}`,
-        sourceId: source.sourceId,
-        title: result.title,
-        authors: result.authors,
-        year: result.year,
-        apa: result.citationAPA,
-        bibtex: result.bibtex,
-        doi: result.doi || undefined,
-      };
-      
-      setCitations(prev => [...prev, newCitation]);
-      setCitationOverlay({ visible: true, status: 'success', sourceId: source.sourceId });
-      
-      setTimeout(() => {
-        setCitationOverlay({ visible: false, status: null, sourceId: null });
-      }, 2000);
-      
-      toast.success('Citation captured! See sidebar.');
-    } catch (error) {
-      setCitationOverlay({ visible: false, status: null, sourceId: null });
-      toast.error('Failed to capture citation');
-    }
-  }, []);
-
-  // Generate literature survey
-  const handleGenerateSurvey = useCallback(async () => {
-    if (!project || project.sources.length === 0) {
-      toast.error('Add some sources first');
-      return;
-    }
-
-    setIsGeneratingSurvey(true);
-    setSurveyContent(null);
-
-    try {
-      const result = await mockApi.summarize(
-        project.id,
-        project.sources.map(s => s.sourceId)
-      );
-      setSurveyContent(result.summaryHtml);
-      toast.success('Literature survey generated!');
-    } catch (error) {
-      toast.error('Failed to generate survey');
+      console.error('Error fetching sources:', error);
     } finally {
-      setIsGeneratingSurvey(false);
+      setLoading(false);
     }
-  }, [project]);
+  };
 
-  // Export citations
-  const handleExport = useCallback(async (format: 'bibtex' | 'json') => {
-    if (citations.length === 0) {
-      toast.error('No citations to export');
-      return;
-    }
+  const generateSummary = async (cardId: string) => {
+    // TODO: Call MCP summarize endpoint
+    console.log('Generating summary for:', cardId);
+  };
 
+  const extractCitations = async (cardId: string) => {
+    // TODO: Call MCP extract_citations endpoint
+    console.log('Extracting citations for:', cardId);
+  };
+
+  const generateLiteratureSurvey = async () => {
+    const selectedCards = cards.filter(card => card.addedToSurvey);
+    if (selectedCards.length === 0) return;
+    
+    setLoading(true);
     try {
-      const blob = await mockApi.exportSession(project?.id || '', format, citations);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `citations.${format === 'bibtex' ? 'bib' : 'json'}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success(`Exported ${citations.length} citations`);
+      // TODO: Call MCP combine_sources endpoint
+      // const response = await fetch('/api/mcp/combine_sources', {
+      //   method: 'POST',
+      //   body: JSON.stringify({ sources: selectedCards })
+      // });
+      // const survey = await response.json();
+      
+      // Mock survey
+      setLiteratureSurvey(`Literature Survey for ${researchTopic}\n\nKey findings from ${selectedCards.length} sources...`);
     } catch (error) {
-      toast.error('Export failed');
+      console.error('Error generating survey:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [citations, project?.id]);
-
-  // Chat functionality
-  const handleSendChat = useCallback(() => {
-    if (!chatInput.trim()) return;
-    
-    const userMessage = chatInput.trim();
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setChatInput('');
-    
-    // Simulate AI response
-    setTimeout(() => {
-      setChatMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `I can help you with your research on "${project?.name || 'your topic'}". Based on your sources, quantum computing leverages quantum mechanical phenomena like superposition and entanglement for computation. Would you like me to summarize a specific aspect or help find related sources?`
-      }]);
-    }, 1000);
-  }, [chatInput, project?.name]);
-
-  // Remove source
-  const handleRemoveSource = useCallback((sourceId: string) => {
-    if (!project) return;
-    setProject({
-      ...project,
-      sources: project.sources.filter(s => s.sourceId !== sourceId)
-    });
-    if (activeSourceId === sourceId) {
-      setActiveSourceId(project.sources[0]?.sourceId || null);
-    }
-    toast.success('Source removed');
-  }, [project, activeSourceId]);
-
-  // Create note from highlight
-  const handleCreateNote = useCallback((text: string) => {
-    if (!activeSourceId) return;
-    const newNote: Note = {
-      id: `note-${Date.now()}`,
-      sourceId: activeSourceId,
-      text: text,
-      highlight: text,
-      createdAt: new Date(),
-    };
-    setNotes(prev => [...prev, newNote]);
-    toast.success('Note created');
-  }, [activeSourceId]);
-
-  // Empty state
-  if (!project) {
-    return (
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <header className="border-b bg-card transition-theme">
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
-                <ChevronLeft className="w-5 h-5" />
-              </Button>
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <BookOpen className="w-4 h-4 text-primary-foreground" />
-              </div>
-              <span className="font-display font-bold text-lg">Research Mode</span>
-            </div>
-          </div>
-        </header>
-
-        {/* Empty state */}
-        <main className="container mx-auto px-6 py-24">
-          <div className="max-w-md mx-auto text-center animate-fade-in">
-            <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
-              <BookOpen className="w-10 h-10 text-primary" />
-            </div>
-            <h1 className="text-2xl font-display font-bold text-foreground mb-3">
-              Start Your Research
-            </h1>
-            <p className="text-muted-foreground mb-8">
-              Create a new project to begin capturing citations, annotating sources, and generating literature surveys.
-            </p>
-            <Button size="lg" onClick={() => setNewProjectDialogOpen(true)}>
-              <Plus className="w-5 h-5" />
-              Start New Project
-            </Button>
-          </div>
-
-          {/* New project dialog */}
-          {newProjectDialogOpen && (
-            <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 animate-fade-in">
-              <div className="bg-card rounded-2xl p-6 w-full max-w-md shadow-elevated animate-scale-in">
-                <h2 className="text-xl font-display font-bold mb-4">New Research Project</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Project Name</label>
-                    <Input
-                      value={newProjectName}
-                      onChange={(e) => setNewProjectName(e.target.value)}
-                      placeholder="Enter project name"
-                      className="h-11"
-                    />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    This demo will create a project with sample sources: a Wikipedia article and a PDF on quantum computing.
-                  </p>
-                  <div className="flex gap-3 justify-end">
-                    <Button variant="outline" onClick={() => setNewProjectDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleCreateProject}>
-                      Create Project
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    );
-  }
+  };
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
-      {/* Topbar */}
-      <header className="border-b bg-card flex-shrink-0 transition-theme">
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
-              <ChevronLeft className="w-5 h-5" />
-            </Button>
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <BookOpen className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="font-display font-bold text-lg leading-tight">{project.name}</h1>
-              <p className="text-xs text-muted-foreground">{project.sources.length} sources • {citations.length} citations</p>
-            </div>
-          </div>
-
-          <div className="flex-1 max-w-md mx-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search topic or add URL..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="glow"
-              onClick={handleGenerateSurvey}
-              disabled={isGeneratingSurvey}
-            >
-              {isGeneratingSurvey ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Generate Survey
-                </>
-              )}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => toast.success('Session saved')}>
-              <Save className="w-4 h-4" />
-              Save
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => handleExport('bibtex')}>
-              <Download className="w-4 h-4" />
-              Export
-            </Button>
-          </div>
+    <div className="container mx-auto p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">Research Mode</h1>
+          <p className="text-muted-foreground">Centralized research workspace</p>
         </div>
-      </header>
+        <Button onClick={generateLiteratureSurvey} disabled={cards.length === 0}>
+          <BookOpen className="mr-2 h-4 w-4" />
+          Generate Literature Survey
+        </Button>
+      </div>
 
-      {/* Main workspace */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <aside
-          className={`
-            border-r bg-card flex-shrink-0 transition-all duration-300 overflow-hidden
-            ${sidebarOpen ? 'w-56' : 'w-14'}
-          `}
-        >
-          <div className="p-2 border-b flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+      {/* Topic Search */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Start Your Research</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter research topic..."
+              value={researchTopic}
+              onChange={(e) => setResearchTopic(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && fetchResearchSources()}
+            />
+            <Button onClick={fetchResearchSources} disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Search
             </Button>
-            {sidebarOpen && <span className="text-sm font-medium">Tools</span>}
           </div>
+        </CardContent>
+      </Card>
 
-          <nav className="p-2 space-y-1">
-            <SidebarItem
-              icon={Quote}
-              label="Citations"
-              count={citations.length}
-              expanded={sidebarOpen}
-              active
-            />
-            <SidebarItem
-              icon={Highlighter}
-              label="Highlighter"
-              expanded={sidebarOpen}
-              active={highlighterActive}
-              onClick={() => setHighlighterActive(!highlighterActive)}
-            />
-            <SidebarItem
-              icon={FileText}
-              label="Notes"
-              count={notes.length}
-              expanded={sidebarOpen}
-            />
-            <SidebarItem
-              icon={MessageSquare}
-              label="AI Assistant"
-              expanded={sidebarOpen}
-            />
-          </nav>
-        </aside>
+      <Tabs defaultValue="workspace" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="workspace">
+            <FileText className="mr-2 h-4 w-4" />
+            Research Workspace
+          </TabsTrigger>
+          <TabsTrigger value="survey">
+            <BookOpen className="mr-2 h-4 w-4" />
+            Literature Survey
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Left pane - Sources */}
-        <div className="w-64 border-r bg-surface-sunken flex flex-col flex-shrink-0">
-          <div className="p-3 border-b">
-            <h2 className="font-semibold text-sm">Sources</h2>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {project.sources.map((source) => (
-              <SourceCard
-                key={source.sourceId}
-                source={source}
-                isActive={activeSourceId === source.sourceId}
-                onClick={() => setActiveSourceId(source.sourceId)}
-                onCaptureCitation={() => handleCaptureCitation(source)}
-                onRemove={() => handleRemoveSource(source.sourceId)}
-                showOverlay={citationOverlay.visible && citationOverlay.sourceId === source.sourceId}
-                overlayStatus={citationOverlay.status}
+        <TabsContent value="workspace">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {cards.map((card) => (
+              <ResearchCardComponent
+                key={card.id}
+                card={card}
+                onUpdate={(updated) => {
+                  setCards(cards.map(c => c.id === updated.id ? updated : c));
+                }}
+                onGenerateSummary={() => generateSummary(card.id)}
+                onExtractCitations={() => extractCitations(card.id)}
               />
             ))}
-          </div>
-        </div>
-
-        {/* Center pane - Reader */}
-        <div className="flex-1 flex flex-col bg-background min-w-0">
-          {surveyContent ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-3xl mx-auto">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-display text-xl font-bold">Generated Literature Survey</h2>
-                  <Button variant="outline" size="sm" onClick={() => setSurveyContent(null)}>
-                    <X className="w-4 h-4" />
-                    Close
-                  </Button>
-                </div>
-                <div 
-                  className="prose prose-sm max-w-none bg-card p-6 rounded-xl border shadow-card"
-                  dangerouslySetInnerHTML={{ __html: surveyContent }}
-                />
-              </div>
-            </div>
-          ) : activeSource ? (
-            <ReaderPane
-              source={activeSource}
-              highlighterActive={highlighterActive}
-              onCreateNote={handleCreateNote}
-            />
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <p>Select a source to view</p>
-            </div>
-          )}
-        </div>
-
-        {/* Right pane - Tools panel */}
-        <div className="w-80 border-l bg-card flex flex-col flex-shrink-0">
-          {/* Tabs */}
-          <div className="border-b flex">
-            <button className="flex-1 px-4 py-3 text-sm font-medium border-b-2 border-primary text-primary">
-              Citations
-            </button>
-            <button className="flex-1 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
-              AI Chat
-            </button>
-          </div>
-
-          {/* Citations list */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {citations.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                <Quote className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>No citations yet</p>
-                <p className="text-xs mt-1">Click "Capture" on a source to add citations</p>
-              </div>
-            ) : (
-              citations.map((citation) => (
-                <CitationCard key={citation.id} citation={citation} />
-              ))
+            {cards.length === 0 && (
+              <Card className="col-span-full p-8 text-center">
+                <p className="text-muted-foreground">No research sources yet. Start by entering a topic above.</p>
+              </Card>
             )}
           </div>
+        </TabsContent>
 
-          {/* AI Chat input */}
-          <div className="border-t p-3">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Ask AI about your sources..."
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
-                className="flex-1"
+        <TabsContent value="survey">
+          <Card>
+            <CardHeader>
+              <CardTitle>Literature Survey</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={literatureSurvey}
+                onChange={(e) => setLiteratureSurvey(e.target.value)}
+                className="min-h-[400px] font-mono"
+                placeholder="Generated literature survey will appear here..."
               />
-              <Button size="icon" onClick={handleSendChat}>
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline">Save</Button>
+                <Button>Export as Markdown</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
-// Sub-components
-
-function SidebarItem({ 
-  icon: Icon, 
-  label, 
-  count, 
-  expanded, 
-  active, 
-  onClick 
+function ResearchCardComponent({ 
+  card, 
+  onUpdate,
+  onGenerateSummary,
+  onExtractCitations 
 }: { 
-  icon: React.ElementType;
-  label: string;
-  count?: number;
-  expanded: boolean;
-  active?: boolean;
-  onClick?: () => void;
+  card: ResearchCard;
+  onUpdate: (card: ResearchCard) => void;
+  onGenerateSummary: () => void;
+  onExtractCitations: () => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`
-        w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors
-        ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}
-      `}
-    >
-      <Icon className="w-4 h-4 flex-shrink-0" />
-      {expanded && (
-        <>
-          <span className="text-sm font-medium flex-1 text-left">{label}</span>
-          {count !== undefined && (
-            <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{count}</span>
-          )}
-        </>
-      )}
-    </button>
-  );
-}
-
-function SourceCard({
-  source,
-  isActive,
-  onClick,
-  onCaptureCitation,
-  onRemove,
-  showOverlay,
-  overlayStatus,
-}: {
-  source: Source;
-  isActive: boolean;
-  onClick: () => void;
-  onCaptureCitation: () => void;
-  onRemove: () => void;
-  showOverlay: boolean;
-  overlayStatus: 'loading' | 'success' | null;
-}) {
-  return (
-    <div
-      className={`
-        relative p-3 rounded-xl border bg-card cursor-pointer transition-all
-        ${isActive ? 'border-primary shadow-card ring-1 ring-primary/20' : 'hover:border-primary/50'}
-      `}
-      onClick={onClick}
-    >
-      {/* Citation overlay */}
-      {showOverlay && (
-        <div className="absolute inset-0 bg-card/95 rounded-xl flex items-center justify-center z-10 animate-fade-in">
-          {overlayStatus === 'loading' ? (
-            <div className="text-center">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
-              <p className="text-sm font-medium">Generating APA Citation...</p>
-            </div>
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-start">
+          <CardTitle className="text-lg">{card.title}</CardTitle>
+          <Badge variant={card.addedToSurvey ? "default" : "outline"}>
+            {card.addedToSurvey ? 'In Survey' : 'Not Added'}
+          </Badge>
+        </div>
+        <div className="flex items-center text-sm text-muted-foreground">
+          <Link className="h-3 w-3 mr-1" />
+          <a href={card.url} target="_blank" rel="noopener noreferrer" className="truncate hover:underline">
+            {card.url}
+          </a>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <h4 className="font-semibold mb-2">Summary</h4>
+          {card.summary ? (
+            <p className="text-sm">{card.summary}</p>
           ) : (
-            <div className="text-center text-success">
-              <CheckCircle2 className="w-6 h-6 mx-auto mb-2" />
-              <p className="text-sm font-medium">Citation saved!</p>
-              <p className="text-xs text-muted-foreground">See Sidebar →</p>
-            </div>
+            <Button size="sm" onClick={onGenerateSummary}>
+              Generate Summary
+            </Button>
           )}
         </div>
-      )}
 
-      <div className="flex items-start gap-3">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${source.type === 'web' ? 'bg-primary/10' : 'bg-destructive/10'}`}>
-          {source.type === 'web' ? (
-            <Globe className="w-4 h-4 text-primary" />
-          ) : (
-            <FileIcon className="w-4 h-4 text-destructive" />
-          )}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h4 className="font-semibold">Citations</h4>
+            <Button size="sm" variant="outline" onClick={onExtractCitations}>
+              Extract
+            </Button>
+          </div>
+          <ScrollArea className="h-24 border rounded p-2">
+            {card.citations.map((citation, index) => (
+              <p key={index} className="text-xs mb-1">{citation}</p>
+            ))}
+          </ScrollArea>
         </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-sm truncate">{source.title}</h3>
-          <p className="text-xs text-muted-foreground truncate">{source.preview}</p>
-        </div>
-      </div>
 
-      <div className="flex items-center gap-1 mt-2 pt-2 border-t">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs flex-1"
-          onClick={(e) => {
-            e.stopPropagation();
-            window.open(source.url, '_blank');
-          }}
-        >
-          <ExternalLink className="w-3 h-3" />
-          Open
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs flex-1"
-          onClick={(e) => {
-            e.stopPropagation();
-            onCaptureCitation();
-          }}
-        >
-          <Quote className="w-3 h-3" />
-          Capture
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          <Trash2 className="w-3 h-3" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function ReaderPane({
-  source,
-  highlighterActive,
-  onCreateNote,
-}: {
-  source: Source;
-  highlighterActive: boolean;
-  onCreateNote: (text: string) => void;
-}) {
-  const [selectedText, setSelectedText] = useState('');
-
-  const handleMouseUp = () => {
-    const selection = window.getSelection();
-    if (selection && selection.toString().trim()) {
-      setSelectedText(selection.toString().trim());
-    }
-  };
-
-  return (
-    <div className="flex-1 flex flex-col" onMouseUp={handleMouseUp}>
-      {/* Reader toolbar */}
-      <div className="border-b px-4 py-2 flex items-center justify-between bg-card">
-        <div className="flex items-center gap-2">
-          {source.type === 'web' ? (
-            <Globe className="w-4 h-4 text-primary" />
-          ) : (
-            <FileIcon className="w-4 h-4 text-destructive" />
-          )}
-          <span className="text-sm font-medium truncate max-w-md">{source.title}</span>
-        </div>
-        {highlighterActive && (
-          <span className="text-xs bg-warning/20 text-warning px-2 py-1 rounded-full">
-            Highlighter active
-          </span>
-        )}
-      </div>
-
-      {/* Content area */}
-      <div className="flex-1 relative">
-        {source.type === 'web' ? (
-          <iframe
-            src={source.url}
-            className="w-full h-full border-0"
-            title={source.title}
-            sandbox="allow-same-origin allow-scripts"
+        <div>
+          <h4 className="font-semibold mb-2">Notes</h4>
+          <Textarea
+            placeholder="Add notes..."
+            value={card.notes}
+            onChange={(e) => onUpdate({ ...card, notes: e.target.value })}
+            className="min-h-[80px] text-sm"
           />
-        ) : (
-          <div className="flex items-center justify-center h-full bg-muted/30">
-            <div className="text-center">
-              <FileIcon className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-              <p className="font-medium">{source.title}</p>
-              <p className="text-sm text-muted-foreground mt-1">PDF viewer would render here</p>
-              <p className="text-xs text-muted-foreground mt-4">
-                (PDF.js integration placeholder - loads on-demand)
-              </p>
-            </div>
+        </div>
+
+        <div className="flex justify-between">
+          <Button
+            size="sm"
+            variant={card.addedToSurvey ? "default" : "outline"}
+            onClick={() => onUpdate({ ...card, addedToSurvey: !card.addedToSurvey })}
+          >
+            {card.addedToSurvey ? 'Remove from Survey' : 'Add to Survey'}
+          </Button>
+        </div>
+
+        {card.keywords.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {card.keywords.map((keyword, index) => (
+              <Badge key={index} variant="secondary" className="text-xs">
+                {keyword}
+              </Badge>
+            ))}
           </div>
         )}
-
-        {/* Selection popup */}
-        {selectedText && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-card border shadow-elevated rounded-lg p-2 flex gap-2 animate-scale-in">
-            <Button size="sm" onClick={() => {
-              onCreateNote(selectedText);
-              setSelectedText('');
-            }}>
-              <FileText className="w-4 h-4" />
-              Create Note
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setSelectedText('')}>
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CitationCard({ citation }: { citation: Citation }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(citation.apa);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="p-3 rounded-xl border bg-surface-elevated animate-slide-in-right">
-      <h4 className="font-medium text-sm mb-1 line-clamp-2">{citation.title}</h4>
-      <p className="text-xs text-muted-foreground mb-2">
-        {citation.authors.join(', ')} ({citation.year})
-      </p>
-      <p className="text-xs text-muted-foreground line-clamp-3 mb-2 italic">
-        {citation.apa}
-      </p>
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full h-7 text-xs"
-        onClick={handleCopy}
-      >
-        {copied ? (
-          <>
-            <CheckCircle2 className="w-3 h-3" />
-            Copied!
-          </>
-        ) : (
-          'Copy APA'
-        )}
-      </Button>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

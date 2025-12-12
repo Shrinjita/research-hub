@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Research Hub",
+  "version": "1.0.0",
+  "description": "Research-mode overlay that changes browser UI, captures citations, and manages sessions.",
+  "permissions": ["tabs", "activeTab", "storage", "scripting"],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "src/icons/icon16.png",
+      "48": "src/icons/icon48.png",
+      "128": "src/icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/scripts/background.js"
+  },
+  "web_accessible_resources": [{
+    "resources": ["src/scripts/inject.js", "src/styles/research.css"],
+    "matches": ["<all_urls>"]
+  }]
+}
