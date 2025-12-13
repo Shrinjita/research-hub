@@ -20,7 +20,7 @@ router.post("/search_scholar", async (req, res) => {
 
     const url = `https://serpapi.com/search.json?${params.toString()}`;
     const response = await fetch(url);
-    const data = await response.json();
+    const data = (await response.json()) as any;
 
     // Send only top 5 results to frontend
     const results = (data?.organic_results || []).slice(0, 5).map((r: any) => ({

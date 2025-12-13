@@ -3,7 +3,7 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import serpapiRoutes from "./serpapi";
+import serpapiRoutes from "./serpapi.js";
 
 // Load env FIRST
 dotenv.config({
@@ -22,8 +22,12 @@ app.use(bodyParser.json());
 app.use("/api/serpapi", serpapiRoutes);
 
 // Gemini client
+if (!process.env.VITE_GEMINI_API_KEY) {
+  console.error("❌ Missing VITE_GEMINI_API_KEY in .env");
+  process.exit(1);
+}
 const ai = new GoogleGenAI({
-  apiKey: process.env.VITE_GEMINI_API_KEY,
+  apiKey: process.env.VITE_GEMINI_API_KEY as string,
 });
 
 // --------- Gemini Routes --------- //
@@ -100,6 +104,14 @@ app.post("/api/gemini/combine_sources", async (req, res) => {
       conclusion: "Fallback Conclusion",
     });
   }
+});
+// Health check (verify server + env)
+app.get("/health", (_, res) => {
+  res.json({
+    status: "ok",
+    serpapi: !!process.env.SERPAPI_KEY,
+    gemini: !!process.env.VITE_GEMINI_API_KEY,
+  });
 });
 
 // Start server
