@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,31 +42,43 @@ export default function ResearchMode() {
   const [literatureSurvey, setLiteratureSurvey] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Load default tab on mount
+  useEffect(() => {
+    addDefaultTab();
+  }, []);
+
+  const addDefaultTab = async () => {
+    const defaultQuery = "Artificial Intelligence Overview"; // Replace with your default topic
+    const fallbackTab: Tab = {
+      id: String(Date.now()),
+      url: `https://scholar.google.com/scholar?q=${encodeURIComponent(defaultQuery)}`,
+      title: defaultQuery,
+      previewText: defaultQuery,
+      summary: MOCK_SUMMARY,
+      citations: MOCK_CITATIONS,
+    };
+    setTabs([fallbackTab]);
+    setActiveTab(fallbackTab.id);
+  };
+
   // ---------- TAB HANDLERS ----------
   const addNewTab = async (query: string) => {
     if (!query.trim()) return;
     setLoading(true);
     try {
-      const response = await fetch(
-        "http://localhost:3001/api/serpapi/search_scholar",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ q: query }),
-        }
-      );
-      if (!response.ok) throw new Error("SERP API failed");
+      const response = await fetch("http://localhost:8000/scholar/search?q=" + encodeURIComponent(query));
+      if (!response.ok) throw new Error("Scholar search failed");
       const data = await response.json();
-      const firstResult = data?.results?.[0];
+      const firstResult = data?.research_items?.[0];
       if (!firstResult) throw new Error("No results");
 
       const newTab: Tab = {
         id: String(Date.now()),
         url: firstResult.link || query,
         title: firstResult.title || query,
-        previewText: firstResult.snippet || query,
-        summary: "", // Gemini summary will fill this, fallback works
-        citations: [], // Gemini citations fallback
+        previewText: firstResult.title || query,
+        summary: "", // To be generated
+        citations: [], // To be generated
       };
 
       setTabs((prev) => [...prev, newTab]);
@@ -75,7 +87,6 @@ export default function ResearchMode() {
     } catch (err) {
       console.error(err);
       alert("Scholar search failed. Using fallback tab.");
-      // fallback tab if SERP fails
       const fallbackTab: Tab = {
         id: String(Date.now()),
         url: query,
@@ -100,6 +111,7 @@ export default function ResearchMode() {
   const summarizeTab = async (tabId: string) => {
     const tab = tabs.find((t) => t.id === tabId);
     if (!tab) return;
+
     setLoading(true);
     try {
       const res = await fetch("http://localhost:3001/api/gemini/summarize", {
@@ -110,8 +122,7 @@ export default function ResearchMode() {
       if (!res.ok) throw new Error("Gemini summarize failed");
       const data = await res.json();
       updateTab(tabId, { summary: data.summary || MOCK_SUMMARY });
-    } catch (e) {
-      console.warn("Gemini summary failed, using fallback");
+    } catch {
       updateTab(tabId, { summary: MOCK_SUMMARY });
     } finally {
       setLoading(false);
@@ -121,21 +132,18 @@ export default function ResearchMode() {
   const extractCitations = async (tabId: string) => {
     const tab = tabs.find((t) => t.id === tabId);
     if (!tab) return;
+
     setLoading(true);
     try {
-      const res = await fetch(
-        "http://localhost:3001/api/gemini/extract_citations",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: tab.previewText }),
-        }
-      );
+      const res = await fetch("http://localhost:3001/api/gemini/extract_citations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: tab.previewText }),
+      });
       if (!res.ok) throw new Error("Gemini citations failed");
       const data = await res.json();
       updateTab(tabId, { citations: Array.isArray(data) ? data : MOCK_CITATIONS });
-    } catch (e) {
-      console.warn("Gemini citations failed, using fallback");
+    } catch {
       updateTab(tabId, { citations: MOCK_CITATIONS });
     } finally {
       setLoading(false);
@@ -148,7 +156,7 @@ export default function ResearchMode() {
 
   const generateLiteratureSurvey = () => {
     const combined = tabs.map((t) => t.summary || t.previewText).join("\n\n");
-    setLiteratureSurvey(`Literature Survey for "${topic || "Selected Topic"}"\n\n${combined}\n\n${MOCK_LIT_SURVEY}`);
+    setLiteratureSurvey(`Literature Survey for Selected Topic\n\n${combined}\n\n${MOCK_LIT_SURVEY}`);
   };
 
   // ---------- RENDER ----------
